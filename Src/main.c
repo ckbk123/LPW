@@ -5,6 +5,7 @@
 #include "stm32l4xx_ll_system.h"
 #include "stm32l4xx_ll_utils.h"
 #include "stm32l4xx_ll_gpio.h"
+#include "stm32l4xx_ll_pwr.h"
 #include "core_cm4.h"
 #include "stm32l4xx_ll_cortex.h"
 // #if defined(USE_FULL_ASSERT)
@@ -20,9 +21,10 @@ int bbleu;
 int expe;
 int impulsion_base;
 int led_counter;
+int high;
 
 int main(void)
-{
+ {
 /* Configure the system clock */
 SystemClock_Config();
 
@@ -35,29 +37,18 @@ SysTick_Config(SystemCoreClock/100);
 //LL_Init10msTick( SystemCoreClock );
 
 bbleu = 0;
-expe = 1;
+expe = 2;
 led_counter = 0;
 impulsion_base = 5;   // in 10ms
-
-LL_RCC_MSI_Disable();
-
+high = 0;
 
 
-while (1);
-/*
-while (1)
- 	{
-	if	( BLUE_BUTTON() )
-		LED_GREEN(1);
-	else {
-		LED_GREEN(0);
-		LL_mDelay(950);
-		LED_GREEN(1);
-		LL_mDelay(50);
-		}
-	}
-*/
+// initialise PC-10 for 50Hz pulse
+
+
+while (1) ;
 }
+
 
 /**
   * @brief  System Clock Configuration
@@ -92,10 +83,6 @@ LL_RCC_MSI_Enable();
 while	(LL_RCC_MSI_IsReady() != 1)
 	{ };
 
-// to calibrate with LSE
-LL_RCC_LSE_Enable();
-if (LL_RCC_LSE_IsReady()) LL_RCC_MSI_EnablePLLMode();
-
 /* Sysclk activation on the MSI */
 LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
 LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_MSI);
@@ -105,6 +92,15 @@ while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_MSI)
 /* Set APB1 & APB2 prescaler*/
 LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
 LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
+
+LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+LL_PWR_EnableBkUpAccess();
+LL_RCC_ForceBackupDomainReset();
+LL_RCC_ReleaseBackupDomainReset();
+LL_RCC_LSE_Enable();
+while (LL_RCC_LSE_IsReady() != 1);
+LL_RCC_MSI_EnablePLLMode();
+
 
 /* Update the global variable called SystemCoreClock */
 SystemCoreClockUpdate();
@@ -133,8 +129,21 @@ void SysTick_Handler() {
 		}else {
 			LL_LPM_EnableSleepOnExit();
 		}
-	}else if (expe == 2) {
+	}
+	else if (expe == 2) {
+		// toggle pin
+		if (high) LL_GPIO_SetOutputPin(OUT_50HZ_PORT, OUT_50HZ_PIN);
+		else LL_GPIO_ResetOutputPin(OUT_50HZ_PORT, OUT_50HZ_PIN);
 
+		high ^= 1;
+
+		/*
+		if	( BLUE_BUTTON() ) {
+			LL_RCC_LSE_Enable();
+			LL_RCC_MSI_EnablePLLMode();
+		}
+		LL_LPM_EnableSleepOnExit();
+		*/
 	}
 }
 
@@ -143,3 +152,4 @@ void LL_Init10msTick(uint32_t HCLKFrequency)
   /* Use frequency provided in argument */
   LL_InitTick(HCLKFrequency, 10000U);
 }
+

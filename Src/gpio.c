@@ -5,10 +5,8 @@
 #include "stm32l4xx_ll_gpio.h"
 #include "gpio.h"
 
-#define LED_PORT GPIOA
-#define LED_PIN LL_GPIO_PIN_5
-#define BUT_PORT GPIOC
-#define BUT_PIN LL_GPIO_PIN_13
+
+
 
 void GPIO_init(void)
 {
@@ -22,6 +20,9 @@ LL_GPIO_SetPinOutputType( LED_PORT, LED_PIN, LL_GPIO_OUTPUT_PUSHPULL );
 LL_AHB2_GRP1_EnableClock( LL_AHB2_GRP1_PERIPH_GPIOC );
 // bouton bleu pin 13
 LL_GPIO_SetPinMode( BUT_PORT, BUT_PIN, LL_GPIO_MODE_INPUT );
+
+// SQUAREWAVE 50HZ
+LL_GPIO_SetPinMode( OUT_50HZ_PORT, OUT_50HZ_PIN, LL_GPIO_MODE_OUTPUT);
 }
 
 
