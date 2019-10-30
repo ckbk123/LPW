@@ -1,4 +1,9 @@
 
+/* ck_apre=LSEFreq/(ASYNC prediv + 1) = 256Hz with LSEFreq=32768Hz */
+#define RTC_ASYNCH_PREDIV          ((uint32_t)0x7F)
+/* ck_spre=ck_apre/(SYNC prediv + 1) = 1 Hz */
+#define RTC_SYNCH_PREDIV           ((uint32_t)0x00FF)
+
 /* Includes ------------------------------------------------------------------*/
 #include "stm32l4xx_ll_bus.h"
 #include "stm32l4xx_ll_rcc.h"
@@ -6,6 +11,7 @@
 #include "stm32l4xx_ll_utils.h"
 #include "stm32l4xx_ll_gpio.h"
 #include "stm32l4xx_ll_pwr.h"
+#include "stm32l4xx_ll_rtc.h"
 #include "core_cm4.h"
 #include "stm32l4xx_ll_cortex.h"
 // #if defined(USE_FULL_ASSERT)
@@ -18,15 +24,22 @@ void    SystemClock_Config (void);
 void 	LL_Init10msTick (uint32_t HCLKFrequency);
 
 int bbleu;
-int expe;
+int expe = 0;
 int impulsion_base;
 int led_counter;
 int high;
 
 int main(void)
- {
+{
 /* Configure the system clock */
 SystemClock_Config();
+
+/* retrieve then increment the expe value stored in rtc bkup register 0 */
+
+expe = LL_RTC_BAK_GetRegister(RTC, LL_RTC_BKP_DR0);
+if (expe == 0) expe = 1;
+LL_RTC_BAK_SetRegister(RTC, LL_RTC_BKP_DR0, (expe == 8) ? 1 : expe + 1);
+LL_RTC_EnableWriteProtection(RTC);
 
 // config GPIO
 GPIO_init();
@@ -37,7 +50,6 @@ SysTick_Config(SystemCoreClock/100);
 //LL_Init10msTick( SystemCoreClock );
 
 bbleu = 0;
-expe = 2;
 led_counter = 0;
 impulsion_base = 5;   // in 10ms
 high = 0;
@@ -93,14 +105,29 @@ while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_MSI)
 LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
 LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
 
+/* initialization for LSE */
 LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
 LL_PWR_EnableBkUpAccess();
-LL_RCC_ForceBackupDomainReset();
-LL_RCC_ReleaseBackupDomainReset();
-LL_RCC_LSE_Enable();
-while (LL_RCC_LSE_IsReady() != 1);
-LL_RCC_MSI_EnablePLLMode();
+if	(LL_RCC_LSE_IsReady()==0)
+{
+	LL_RCC_ForceBackupDomainReset();
+	LL_RCC_ReleaseBackupDomainReset();
+	LL_RCC_LSE_Enable();
+	while (LL_RCC_LSE_IsReady() != 1);
 
+	/* channel clock 32.678kH */
+	LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSE);
+
+	/* configure RTC */
+	LL_RCC_EnableRTC();
+	LL_RTC_DisableWriteProtection(RTC);
+	LL_RTC_EnableInitMode(RTC);
+	LL_RTC_SetHourFormat(RTC, LL_RTC_HOURFORMAT_AMPM);
+	LL_RTC_SetAsynchPrescaler(RTC, RTC_ASYNCH_PREDIV);
+	LL_RTC_SetSynchPrescaler(RTC, RTC_SYNCH_PREDIV);
+	LL_RTC_DisableInitMode(RTC);
+	while(LL_RTC_IsActiveFlag_RS(RTC) != 1);
+}
 
 /* Update the global variable called SystemCoreClock */
 SystemCoreClockUpdate();
@@ -137,13 +164,10 @@ void SysTick_Handler() {
 
 		high ^= 1;
 
-		/*
 		if	( BLUE_BUTTON() ) {
-			LL_RCC_LSE_Enable();
 			LL_RCC_MSI_EnablePLLMode();
 		}
 		LL_LPM_EnableSleepOnExit();
-		*/
 	}
 }
 

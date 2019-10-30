@@ -1,4 +1,4 @@
-main.c:71:6:SystemClock_Config	16	static
-main.c:26:5:main	8	static
-main.c:110:6:SysTick_Handler	8	static
-main.c:150:6:LL_Init10msTick	0	static
+main.c:83:6:SystemClock_Config	16	static
+main.c:32:5:main	8	static
+main.c:137:6:SysTick_Handler	8	static
+main.c:174:6:LL_Init10msTick	0	static
