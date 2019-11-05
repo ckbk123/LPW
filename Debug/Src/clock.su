@@ -1,0 +1,6 @@
+stm32l4xx_ll_bus.h:1086:22:LL_APB1_GRP1_EnableClock.constprop	8	static
+clock.c:28:6:SystemClock_LSE_and_RTC_Config	8	static
+clock.c:62:6:SystemClock_80MHz_HSE_Range1_Config	0	static
+clock.c:90:6:SystemClock_24MHz_MSI_Range1_Config	8	static
+clock.c:122:6:SystemClock_24MHz_MSI_Range2_Config	8	static
+clock.c:155:6:SysTick_Handler	16	static
