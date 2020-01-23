@@ -12,6 +12,7 @@
 #include "stm32l4xx_ll_gpio.h"
 #include "stm32l4xx_ll_pwr.h"
 #include "stm32l4xx_ll_rtc.h"
+#include "stm32l4xx_ll_exti.h"
 #include "core_cm4.h"
 #include "stm32l4xx_ll_cortex.h"
 
@@ -26,7 +27,7 @@
 
 /* configure the LSE and activate the RTC */
 void SystemClock_LSE_and_RTC_Config() {
-	if	(LL_RCC_LSE_IsReady()==0)
+	if	(LL_RCC_LSE_IsReady() == 0)
 	{
 		// enable peripheral PWR to reset entire backup domain
 		LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
@@ -43,7 +44,7 @@ void SystemClock_LSE_and_RTC_Config() {
 		while (LL_RCC_LSE_IsReady() != 1);
 
 		// channel clock 32.678khz to RTC module
-		LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSE);
+		LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSE); // set LSE as clock source for RTC. IMPORTANT because only this allows RTC to work until SHUTDOWN mode
 
 		// configure RTC
 		LL_RCC_EnableRTC();   // activate
@@ -53,12 +54,12 @@ void SystemClock_LSE_and_RTC_Config() {
 		LL_RTC_SetAsynchPrescaler(RTC, RTC_ASYNCH_PREDIV);
 		LL_RTC_SetSynchPrescaler(RTC, RTC_SYNCH_PREDIV);
 		LL_RTC_DisableInitMode(RTC);        // end of init mode
+		LL_RTC_EnableWriteProtection(RTC);     // allow write config
 
 		while(LL_RTC_IsActiveFlag_RS(RTC) != 1);    // wait for RTC activation
 	}
 }
 
-/* configure HSE clock at 80MHz */
 void SystemClock_80MHz_HSE_Range1_Config() {
 	// MSI configuration and activation
 	LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
@@ -151,54 +152,37 @@ void SystemClock_24MHz_MSI_Range2_Config() {
 	SystemCoreClockUpdate();
 }
 
-// SysTick IRQ
-void SysTick_Handler() {
+/* init wake up with specific delay(s) */
+void RTC_wakeup_init( int delay )
+{
+	LL_RTC_DisableWriteProtection( RTC );
+	LL_RTC_WAKEUP_Disable( RTC );
+	while	( !LL_RTC_IsActiveFlag_WUTW( RTC ) ) { }
+	// connecter le timer a l'horloge 1Hz de la RTC
+	LL_RTC_WAKEUP_SetClock( RTC, LL_RTC_WAKEUPCLOCK_CKSPRE );
+	// fixer la duree de temporisation
+	LL_RTC_WAKEUP_SetAutoReload( RTC, delay );	// 16 bits
+	LL_RTC_ClearFlag_WUT(RTC);
+	LL_RTC_EnableIT_WUT(RTC);
+	LL_RTC_WAKEUP_Enable(RTC);
+	LL_RTC_EnableWriteProtection(RTC);
+}
 
-	// turn on the LED with a variable impulsion width corresponding to the correct expe mode
-	if (led_counter < impulsion_base*expe) {
-		LED_GREEN(1);
-		++led_counter;
-	}else if (led_counter < 100) {
-		LED_GREEN(0);
-		++led_counter;
-	}else {
-		led_counter = 0;
-	}
+/* init wakeup mode from STANDBY/SHUTDOWN mode */
+void RTC_wakeup_init_from_standby_or_shutdown( int delay )
+{
+	RTC_wakeup_init( delay );
+	LL_PWR_EnableInternWU();	// enable the Internal Wake-up line
+}
 
-	// blue button pressed detection with 100ms debouncing
-	if (debounce > 0 && debounce < 10) {
-		debounce++;
-	}else {
-		debounce = 0;
-	}
-	if (BLUE_BUTTON()) {
-		// change mode
-		if (debounce == 0) {
-			bbleu ^= 1;  // toggle bbleu
-			debounce = 1;
-		}
-	}
-
-	// toggle pin PC10 to analyse systick freq, therefore evaluating the core clock precision
-	if (high) LL_GPIO_SetOutputPin(OUT_50HZ_PORT, OUT_50HZ_PIN);
-	else LL_GPIO_ResetOutputPin(OUT_50HZ_PORT, OUT_50HZ_PIN);
-	high ^= 1;
-
-	// cases to use expe
-	if (expe == 1 || expe == 3) {
-		// push of button will toggle enable sleep on exit functionality
-		if (bbleu == 0) {
-			LL_LPM_DisableSleepOnExit();
-		}else {
-			LL_LPM_EnableSleepOnExit();
-		}
-	}
-	else if (expe == 2 || expe == 4) {
-		// push of button will toggle MSI calibration with LSE
-		if (bbleu == 0) {
-			LL_RCC_MSI_DisablePLLMode();
-		}else {
-			LL_RCC_MSI_EnablePLLMode();
-		}
-	}
+/* init wakeup mode from STOPx mode */
+void RTC_wakeup_init_from_stop( int delay )
+{
+	RTC_wakeup_init( delay );
+	// valider l'interrupt par la ligne 20 du module EXTI, qui est réservée au wakeup timer
+	LL_EXTI_EnableIT_0_31( LL_EXTI_LINE_20 );
+	LL_EXTI_EnableRisingTrig_0_31( LL_EXTI_LINE_20 );
+	// valider l'interrupt chez NVIC
+	NVIC_SetPriority( RTC_WKUP_IRQn, 1 );
+	NVIC_EnableIRQ( RTC_WKUP_IRQn );
 }
